@@ -4,6 +4,10 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Classe principal que gerencia todas as operações bancárias
+ * Implementa operações como depósito, transferência, consulta de saldo e histórico
+ */
 public class Banco {
     private final Criptografia criptografia;
     private static final String DB_URL = "jdbc:sqlite:banco.db";
@@ -13,6 +17,9 @@ public class Banco {
         inicializarBanco();
     }
 
+    /**
+     * Inicializa o banco de dados criando as tabelas necessárias e a conta de administrador
+     */
     private void inicializarBanco() {
         try (Connection conn = conectarBanco()) {
             criarTabelas(conn);
@@ -155,6 +162,11 @@ public class Banco {
         return 0.0;
     }
 
+    /**
+     * Realiza um depósito na conta do usuário
+     * @param email Email do usuário
+     * @param valor Valor a ser depositado
+     */
     public void depositar(String email, double valor) {
         try (Connection conn = conectarBanco()) {
             conn.setAutoCommit(false);
@@ -177,6 +189,13 @@ public class Banco {
         }
     }
 
+    /**
+     * Realiza uma transferência entre contas
+     * @param emailOrigem Email da conta de origem
+     * @param emailDestino Email da conta de destino
+     * @param valor Valor a ser transferido
+     * @return true se a transferência foi bem sucedida, false caso contrário
+     */
     public boolean transferir(String emailOrigem, String emailDestino, double valor) {
         try (Connection conn = conectarBanco()) {
             if (consultarSaldo(emailOrigem) < valor) {
@@ -217,6 +236,15 @@ public class Banco {
         }
     }
 
+    /**
+     * Registra uma transação no histórico
+     * @param conn Conexão com o banco de dados
+     * @param emailOrigem Email da conta de origem
+     * @param emailDestino Email da conta de destino
+     * @param tipo Tipo da transação (deposito, transferencia, etc)
+     * @param valor Valor da transação
+     * @return ID da transação registrada ou -1 em caso de erro
+     */
     private int registrarTransacao(Connection conn, String emailOrigem, String emailDestino, String tipo, double valor) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
                 "INSERT INTO historico (email_origem, email_destino, tipo, valor) VALUES (?, ?, ?, ?)")) {
@@ -226,7 +254,6 @@ public class Banco {
             stmt.setDouble(4, valor);
             stmt.executeUpdate();
             
-            // Buscar o ID da última inserção
             try (Statement stmt2 = conn.createStatement();
                  ResultSet rs = stmt2.executeQuery("SELECT last_insert_rowid()")) {
                 if (rs.next()) {
@@ -237,6 +264,10 @@ public class Banco {
         return -1;
     }
 
+    /**
+     * Consulta o histórico completo de transações
+     * @return Lista de todas as transações realizadas
+     */
     public List<Transacao> consultarHistorico() {
         List<Transacao> historico = new ArrayList<>();
         try (Connection conn = conectarBanco()) {
@@ -308,6 +339,13 @@ public class Banco {
         return historico;
     }
 
+    /**
+     * Registra uma denúncia relacionada a uma transação
+     * @param idTransacao ID da transação denunciada
+     * @param emailDenunciante Email do usuário que fez a denúncia
+     * @param descricao Descrição da denúncia
+     * @return true se a denúncia foi registrada com sucesso
+     */
     public boolean registrarDenuncia(int idTransacao, String emailDenunciante, String descricao) {
         try (Connection conn = conectarBanco()) {
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -360,11 +398,15 @@ public class Banco {
         return denuncias;
     }
 
+    /**
+     * Reverte uma transferência e atualiza o status da denúncia
+     * @param idTransacao ID da transação a ser revertida
+     * @return true se a reversão foi bem sucedida
+     */
     public boolean reverterTransferencia(int idTransacao) {
         try (Connection conn = conectarBanco()) {
             conn.setAutoCommit(false);
             try {
-                // Buscar detalhes da transação
                 String emailOrigem, emailDestino;
                 double valor;
                 try (PreparedStatement stmt = conn.prepareStatement(
@@ -380,7 +422,6 @@ public class Banco {
                     }
                 }
 
-                // Reverter a transferência
                 try (PreparedStatement stmt = conn.prepareStatement(
                         "UPDATE usuarios SET saldo = saldo + ? WHERE email = ?")) {
                     stmt.setDouble(1, valor);
@@ -395,10 +436,8 @@ public class Banco {
                     stmt.executeUpdate();
                 }
 
-                // Registrar a reversão no histórico
                 registrarTransacao(conn, emailDestino, emailOrigem, "reversao", valor);
 
-                // Atualizar status da denúncia
                 try (PreparedStatement stmt = conn.prepareStatement(
                         "UPDATE denuncias SET status = 'RESOLVIDA' WHERE id_transacao = ?")) {
                     stmt.setInt(1, idTransacao);
