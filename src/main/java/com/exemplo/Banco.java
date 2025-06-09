@@ -11,6 +11,7 @@ import java.util.List;
 public class Banco {
     private final Criptografia criptografia;
     private static final String DB_URL = "jdbc:sqlite:banco.db";
+    private static final String TIMEZONE = "America/Sao_Paulo";
 
     public Banco() {
         this.criptografia = new Criptografia();
@@ -32,7 +33,12 @@ public class Banco {
     private Connection conectarBanco() throws SQLException {
         try {
             Class.forName("org.sqlite.JDBC");
-            return DriverManager.getConnection(DB_URL);
+            Connection conn = DriverManager.getConnection(DB_URL);
+            // Configurar o fuso horário para o Brasil
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA timezone = '" + TIMEZONE + "'");
+            }
+            return conn;
         } catch (ClassNotFoundException e) {
             throw new SQLException("Driver SQLite não encontrado: " + e.getMessage());
         }
@@ -56,24 +62,24 @@ public class Banco {
                     "email_destino TEXT," +
                     "tipo TEXT NOT NULL," +
                     "valor REAL NOT NULL," +
-                    "data TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "data TIMESTAMP DEFAULT (datetime('now', 'localtime'))," +
                     "FOREIGN KEY(email_origem) REFERENCES usuarios(email)," +
                     "FOREIGN KEY(email_destino) REFERENCES usuarios(email))");
 
             stmt.execute("CREATE TABLE IF NOT EXISTS denuncias (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "id_transacao INTEGER NOT NULL," +
-                    "email_denunciante TEXT NOT NULL," +
-                    "descricao TEXT NOT NULL," +
+                    "id_transacao INTEGER," +
+                    "email_denunciante TEXT," +
+                    "descricao TEXT," +
                     "status TEXT DEFAULT 'PENDENTE'," +
-                    "data_denuncia TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "data_denuncia TIMESTAMP DEFAULT (datetime('now', 'localtime'))," +
                     "FOREIGN KEY(id_transacao) REFERENCES historico(id)," +
                     "FOREIGN KEY(email_denunciante) REFERENCES usuarios(email))");
         }
     }
 
     private void criarAdmin(Connection conn) throws SQLException {
-        String senhaHash = "6f403cce6bb38bd0a424f416cc7250372dd3977d6f4740cd1db4ab569400a8ac";
+        String senhaHash = criptografia.criptografar("admin123");
         try (PreparedStatement stmt = conn.prepareStatement(
                 "INSERT OR IGNORE INTO usuarios (email, nome, senha, saldo, is_admin) VALUES (?, ?, ?, ?, ?)")) {
             stmt.setString(1, "admin@banco.com");   
